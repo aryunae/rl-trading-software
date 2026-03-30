@@ -1,0 +1,11 @@
+numpy
+pandas
+matplotlib
+seaborn
+tensorflow>=2.15
+gymnasium
+scikit-learn
+yfinance
+pytest
+pytest-cov
+flake8
