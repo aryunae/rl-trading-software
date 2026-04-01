@@ -29,7 +29,8 @@ The environment simulates trading with realistic costs (trading and time costs) 
 ```bash
 git clone https://github.com/aryunae/rl-trading-software.git
 cd rl-trading-software
-Step 2: Install TA-Lib (system dependency)
+
+### Step 2: Install TA-Lib (system dependency)
 Ubuntu/Debian:
 
 bash
@@ -45,10 +46,10 @@ Download the appropriate .whl file from here and install with pip:
 
 bash
 pip install TA_Lib‑0.4.32‑cp310‑cp310‑win_amd64.whl
-Step 3: Install Python dependencies
+### Step 3: Install Python dependencies
 bash
 pip install -r requirements.txt
-Step 4: Prepare data
+### Step 4: Prepare data
 Place your assets.h5 file in the data/ folder. Create the folder if it doesn't exist:
 
 bash
