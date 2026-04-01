@@ -1,228 +1,203 @@
 """
-Training script for DDQN trading agent.
-
-This script trains a DDQN agent on stock data and saves results.
+Main script to train the DDQN agent on the trading environment.
+Uses the original TradingEnvironment from trading_env.py.
 """
 
+import warnings
+warnings.filterwarnings('ignore')
+
 import argparse
+import sys
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import tensorflow as tf
-from pathlib import Path
-from time import time
-from typing import Optional, Tuple
+import gymnasium as gym
+from gymnasium.envs.registration import register
 
-from src.trading_env import TradingEnvironment
-from src.dqn_agent import DDQNAgent
+# Add current directory to path to import local modules
+sys.path.append(str(Path(__file__).parent))
+
+# Import your original environment and the new agent
+from trading_env import TradingEnvironment
+from src.agent import DDQNAgent
+
+# Register the trading environment
+register(
+    id='trading-v0',
+    entry_point='trading_env:TradingEnvironment',
+    max_episode_steps=252
+)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description='Train DDQN trading agent')
-    
-    # Data parameters
+    parser = argparse.ArgumentParser(description='Train a DDQN trading agent.')
+    parser.add_argument('--episodes', type=int, default=1000,
+                       help='Number of episodes to train')
+    parser.add_argument('--trading-days', type=int, default=252,
+                       help='Trading days per episode')
     parser.add_argument('--ticker', type=str, default='AAPL',
-                        help='Stock ticker symbol')
-    parser.add_argument('--trading_days', type=int, default=252,
-                        help='Number of days per episode')
-    parser.add_argument('--trading_cost', type=float, default=1e-3,
-                        help='Trading cost in basis points')
-    parser.add_argument('--time_cost', type=float, default=1e-4,
-                        help='Time cost per step')
-    
-    # Training parameters
-    parser.add_argument('--episodes', type=int, default=500,
-                        help='Number of training episodes')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed')
-    
-    # Agent parameters
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
-                        help='Learning rate')
-    parser.add_argument('--gamma', type=float, default=0.99,
-                        help='Discount factor')
-    parser.add_argument('--epsilon_start', type=float, default=1.0,
-                        help='Initial epsilon')
-    parser.add_argument('--epsilon_end', type=float, default=0.01,
-                        help='Final epsilon')
-    parser.add_argument('--epsilon_decay_steps', type=int, default=250,
-                        help='Steps for linear epsilon decay')
-    parser.add_argument('--epsilon_exp_decay', type=float, default=0.99,
-                        help='Exponential decay factor')
-    parser.add_argument('--replay_capacity', type=int, default=100000,
-                        help='Replay buffer size')
-    parser.add_argument('--batch_size', type=int, default=4096,
-                        help='Batch size for training')
-    parser.add_argument('--tau', type=int, default=100,
-                        help='Target network update frequency')
-    parser.add_argument('--l2_reg', type=float, default=1e-6,
-                        help='L2 regularization factor')
-    
-    # Architecture
-    parser.add_argument('--architecture', type=int, nargs='+', default=[256, 256],
-                        help='Hidden layer sizes')
-    
-    # Output
-    parser.add_argument('--output_dir', type=str, default='./results',
-                        help='Directory to save results')
-    parser.add_argument('--save_model', action='store_true',
-                        help='Save trained model')
-    
+                       help='Stock ticker symbol')
+    parser.add_argument('--results-dir', type=str, default='results',
+                       help='Directory to save results')
     return parser.parse_args()
 
 
-def setup_output_dir(output_dir: str) -> Path:
-    """Create output directory if it doesn't exist."""
-    path = Path(output_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+def format_time(t):
+    """Format seconds to HH:MM:SS."""
+    m, s = divmod(t, 60)
+    h, m = divmod(m, 60)
+    return f'{h:02.0f}:{m:02.0f}:{s:02.0f}'
 
 
-def track_results(
-    episode: int,
-    navs: list,
-    market_navs: list,
-    diffs: list,
-    start_time: float,
-    epsilon: float
-) -> None:
+def track_results(episode, navs, market_navs, diffs, total_time, epsilon):
     """Print training progress."""
-    nav_ma_100 = np.mean(navs[-100:]) if navs else 1.0
-    nav_ma_10 = np.mean(navs[-10:]) if navs else 1.0
-    market_nav_100 = np.mean(market_navs[-100:]) if market_navs else 1.0
-    market_nav_10 = np.mean(market_navs[-10:]) if market_navs else 1.0
-    win_ratio = np.sum([d > 0 for d in diffs[-100:]]) / min(len(diffs), 100) if diffs else 0.0
-    
-    elapsed = time() - start_time
-    print(f'{episode:4d} | {elapsed:6.1f}s | A:{nav_ma_100-1:6.1%} ({nav_ma_10-1:6.1%}) | '
-          f'M:{market_nav_100-1:6.1%} ({market_nav_10-1:6.1%}) | '
-          f'W:{win_ratio:5.1%} | ε:{epsilon:6.3f}')
+    if episode % 10 != 0:
+        return
+
+    nav_ma_100 = np.mean(navs[-100:]) if len(navs) >= 100 else np.mean(navs)
+    nav_ma_10 = np.mean(navs[-10:]) if len(navs) >= 10 else np.mean(navs)
+    market_nav_100 = np.mean(market_navs[-100:]) if len(market_navs) >= 100 else np.mean(market_navs)
+    market_nav_10 = np.mean(market_navs[-10:]) if len(market_navs) >= 10 else np.mean(market_navs)
+
+    win_ratio = np.sum([d > 0 for d in diffs[-100:]]) / min(len(diffs), 100)
+
+    print(f'{episode:>4d}|{format_time(total_time)}|'
+          f'A:{nav_ma_100-1:>6.1%}({nav_ma_10-1:>6.1%})|'
+          f'M:{market_nav_100-1:>6.1%}({market_nav_10-1:>6.1%})|'
+          f'W:{win_ratio:>5.1%}|ε:{epsilon:>6.3f}')
 
 
-def plot_results(
-    results_df: pd.DataFrame,
-    output_dir: Path,
-    ticker: str
-) -> None:
-    """Generate and save performance plots."""
+def plot_results(results_df, results_path):
+    """Plot and save training results."""
     fig, axes = plt.subplots(ncols=2, figsize=(14, 4), sharey=True)
-    
-    # Rolling returns
+
+    # Annual returns
     df1 = (results_df[['Agent', 'Market']]
            .sub(1)
            .rolling(100)
            .mean())
     df1.plot(ax=axes[0], title='Annual Returns (Moving Average)', lw=1)
-    
-    # Win ratio
+
+    # Outperformance
     df2 = results_df['Strategy Wins (%)'].div(100).rolling(50).mean()
     df2.plot(ax=axes[1], title='Agent Outperformance (%, Moving Average)')
-    axes[1].axhline(0.5, ls='--', c='k', lw=1)
-    
-    # Formatting
+
     for ax in axes:
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0%}'))
         ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:,.0f}'))
-    
-    axes[0].set_ylabel('Return')
-    axes[1].set_ylabel('Win Rate')
-    
+    axes[1].axhline(0.5, ls='--', c='k', lw=1)
+
     sns.despine()
     fig.tight_layout()
-    fig.savefig(output_dir / f'{ticker}_performance.png', dpi=300)
-    plt.close()
-    
-    # Distribution plot
-    fig, ax = plt.subplots(figsize=(8, 4))
-    sns.histplot(results_df['Difference'], bins=50, ax=ax)
-    ax.set_title(f'{ticker}: Distribution of Agent - Market Returns')
-    ax.set_xlabel('Excess Return')
-    sns.despine()
-    fig.tight_layout()
-    fig.savefig(output_dir / f'{ticker}_distribution.png', dpi=300)
-    plt.close()
+    fig.savefig(results_path / 'performance.png', dpi=300)
+    plt.close(fig)
 
 
-def main() -> None:
-    """Main training function."""
+def main():
+    """Main training loop."""
     args = parse_args()
-    
-    # Set seeds for reproducibility
-    np.random.seed(args.seed)
-    tf.random.set_seed(args.seed)
-    
-    # Setup output directory
-    output_dir = setup_output_dir(args.output_dir)
-    
-    print(f"Training DDQN agent on {args.ticker} for {args.episodes} episodes")
-    print(f"Episode length: {args.trading_days} days")
-    print(f"Output directory: {output_dir}")
-    print("-" * 60)
-    
-    # Create environment
+
+    # Set up paths
+    results_path = Path(args.results_dir)
+    results_path.mkdir(exist_ok=True)
+
+    # Set random seeds for reproducibility
+    np.random.seed(42)
+    tf.random.set_seed(42)
+
+    # Create environment using your original TradingEnvironment
     env = TradingEnvironment(
         trading_days=args.trading_days,
-        trading_cost_bps=args.trading_cost,
-        time_cost_bps=args.time_cost,
-        ticker=args.ticker
+        ticker=args.ticker,
+        trading_cost_bps=1e-4,
+        time_cost_bps=1e-5
     )
-    
-    # Get state and action dimensions
+
     state_dim = env.observation_space.shape[0]
-    n_actions = env.action_space.n
-    
-    print(f"State dimension: {state_dim}, Actions: {n_actions}")
-    
-    # Create agent
+    num_actions = env.action_space.n
+
+    print(f"State dimension: {state_dim}")
+    print(f"Number of actions: {num_actions}")
+    print(f"Trading days per episode: {args.trading_days}")
+
+    # Hyperparameters
     agent = DDQNAgent(
         state_dim=state_dim,
-        num_actions=n_actions,
-        learning_rate=args.learning_rate,
-        gamma=args.gamma,
-        epsilon_start=args.epsilon_start,
-        epsilon_end=args.epsilon_end,
-        epsilon_decay_steps=args.epsilon_decay_steps,
-        epsilon_exponential_decay=args.epsilon_exp_decay,
-        replay_capacity=args.replay_capacity,
-        architecture=tuple(args.architecture),
-        l2_reg=args.l2_reg,
-        tau=args.tau,
-        batch_size=args.batch_size
+        num_actions=num_actions,
+        learning_rate=0.0001,
+        gamma=0.99,
+        epsilon_start=1.0,
+        epsilon_end=0.01,
+        epsilon_decay_steps=250,
+        epsilon_exponential_decay=0.99,
+        replay_capacity=int(1e6),
+        architecture=(256, 256),
+        l2_reg=1e-6,
+        tau=100,
+        batch_size=4096
     )
-    
+
+    print('\nModel summary:')
+    agent.online_network.summary()
+
     # Training loop
-    navs = []
-    market_navs = []
-    diffs = []
-    start_time = time()
-    
+    navs, market_navs, diffs = [], [], []
+    print(f'\nStart training for {args.episodes} episodes...')
+
     for episode in range(1, args.episodes + 1):
-        state = env.reset(seed=args.seed + episode)
-        episode_reward = 0
-        step = 0
-        
-        while True:
-            action = agent.epsilon_greedy_policy(state.reshape(1, -1))
-            next_state, reward, terminated, truncated, info = env.step(action)
-            episode_reward += reward
-            step += 1
-            
-            done = terminated or truncated
-            agent.memorize_transition(
-                state, action, reward, next_state,
-                0.0 if done else 1.0
-            )
-            
-            if agent.train:
-                agent.experience_replay()
-            
-            if done:
-                break
+        state = env.reset()
+        terminated = False
+        truncated = False
+
+        while not (terminated or truncated):
+            action = agent.epsilon_greedy_policy(state.reshape(-1, state_dim))
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            agent.memorize_transition(state, action, reward, next_state,
+                                     0.0 if terminated else 1.0)
+            agent.experience_replay()
             state = next_state
-        
-        # Store results
-        result = env.simulator.result()
-        nav = result.nav.iloc[-1]
-        market_nav = result.mark
+
+        # Track results
+        simulator = env.simulator
+        result = simulator.result()
+        final = result.iloc[-1]
+
+        nav = final.nav * (1 + final.strategy_return)
+        navs.append(nav)
+
+        market_nav = final.market_nav
+        market_navs.append(market_nav)
+
+        diff = nav - market_nav
+        diffs.append(diff)
+
+        # Print progress
+        track_results(episode, navs, market_navs, diffs,
+                     agent.total_steps, agent.epsilon)
+
+    env.close()
+
+    # Save results
+    results_df = pd.DataFrame({
+        'Episode': list(range(1, episode + 1)),
+        'Agent': navs,
+        'Market': market_navs,
+        'Difference': diffs
+    }).set_index('Episode')
+    results_df['Strategy Wins (%)'] = (results_df.Difference > 0).rolling(100).sum()
+    results_df.to_csv(results_path / 'results.csv')
+
+    # Plot results
+    plot_results(results_df, results_path)
+
+    print(f'\nTraining complete. Results saved to {results_path}')
+    print(f'  - results.csv: training history')
+    print(f'  - performance.png: performance plot')
+
+
+if __name__ == '__main__':
+    main()
