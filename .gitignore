@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Data (your assets.h5)
+data/*.h5
+*.h5
+
+# Results
+results/*.png
+results/*.csv
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
