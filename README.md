@@ -1,128 +1,138 @@
-# RL Trading Software Complex
+# RL Trading Bot
 
-[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/YOUR_USERNAME/rl-trading-software/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/rl-trading-software/actions/workflows/ci.yml)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+Reinforcement Learning agent for stock trading using Double Deep Q-Network (DDQN).
 
-Reinforcement Learning agent for algorithmic trading using **Double Deep Q-Network (DDQN)**.
+## Project Overview
 
-##  Overview
+This project implements a reinforcement learning agent that learns to trade a single stock using a custom OpenAI Gym environment. The agent can take three actions: SHORT, HOLD, and LONG. It receives observations including price returns and technical indicators (RSI, MACD, ATR, etc.).
 
-This project implements a complete software complex for training and evaluating a trading agent using reinforcement learning. The agent learns to make trading decisions (SHORT, HOLD, LONG) based on historical stock data and technical indicators, aiming to maximize returns while accounting for transaction costs.
+The environment simulates trading with realistic costs (trading and time costs) and tracks both the agent's net asset value (NAV) and a buy-and-hold market benchmark.
 
-### Key Features
+## Features
 
--  **DDQN Agent**: Double Deep Q-Network with experience replay and target network
--  **Trading Environment**: Custom OpenAI Gym environment with realistic transaction costs
--  **Technical Indicators**: RSI, MACD, ATR, and multi-period returns
--  **Real Data**: Automatic data download via yfinance
--  **Comprehensive Tests**: Unit tests with pytest
--  **CI/CD**: Automated testing with GitHub Actions
--  **Fully Documented**: Complete docstrings and type hints
+- Custom OpenAI Gym trading environment
+- Double DQN agent with experience replay
+- Technical indicators calculated with TA-Lib
+- Configurable hyperparameters
+- Training progress tracking and visualization
+- CI/CD pipeline with GitHub Actions
 
-### Actions
-
-| Action | Code | Position | Description |
-|--------|------|----------|-------------|
-| SHORT | 0 | -1 | Take a short position (bet on price decrease) |
-| HOLD | 1 | 0 | Hold cash, no position |
-| LONG | 2 | +1 | Take a long position (bet on price increase) |
-
-### Costs
-
-- **Trading cost**: 10 basis points (0.1%) per trade
-- **Time cost**: 1 basis point (0.01%) per step when holding a position
-
-##  Installation
+## Installation
 
 ### Prerequisites
 
-- Python 3.9 or higher
-- pip (Python package manager)
+- Python 3.10 or higher
+- TA-Lib system library
 
 ### Step 1: Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/rl-trading-software.git
+git clone https://github.com/aryunae/rl-trading-software.git
 cd rl-trading-software
+Step 2: Install TA-Lib (system dependency)
+Ubuntu/Debian:
 
-### Step 2: Create virtual environment (recommended)
+bash
+sudo apt-get update
+sudo apt-get install -y ta-lib
+macOS:
 
-# Linux/macOS
-python -m venv venv
-source venv/bin/activate
+bash
+brew install ta-lib
+Windows:
 
-# Windows
-python -m venv venv
-venv\Scripts\activate
+Download the appropriate .whl file from here and install with pip:
 
-### Step 3: Install dependencies
-
+bash
+pip install TA_Lib‑0.4.32‑cp310‑cp310‑win_amd64.whl
+Step 3: Install Python dependencies
+bash
 pip install -r requirements.txt
+Step 4: Prepare data
+Place your assets.h5 file in the data/ folder. Create the folder if it doesn't exist:
 
-### Usage
-Basic Training
-Train the agent on Apple stock (AAPL) for 500 episodes:
+bash
+mkdir -p data
+# Copy your assets.h5 file into the data/ folder
+Usage
+Training the agent
+To train the agent with default settings:
 
-python src/train.py --ticker AAPL --episodes 500
+bash
+python train.py
+Training with custom parameters
+bash
+python train.py --episodes 500 --trading-days 126 --ticker GOOGL
+Command-line arguments
+Argument	Description	Default
+--episodes	Number of episodes to train	1000
+--trading-days	Trading days per episode	252
+--ticker	Stock ticker symbol	AAPL
+--results-dir	Directory to save results	results
+Running the notebook
+For interactive analysis and visualization, use the original Jupyter notebook:
 
-Advanced Training with Custom Parameters
+bash
+jupyter notebook 4_q_learning_for_trading.ipynb
+Project Structure
+text
+rl-trading-software/
+├── .github/workflows/   # CI/CD configuration
+│   └── ci.yml
+├── src/                 # Source code
+│   ├── __init__.py
+│   └── agent.py         # DDQN agent class
+├── data/                # Data files (place assets.h5 here)
+├── results/             # Training results (auto-generated)
+├── trading_env.py       # Trading environment (original)
+├── 4_q_learning_for_trading.ipynb  # Jupyter notebook (original)
+├── train.py             # Main training script
+├── requirements.txt     # Python dependencies
+├── .gitignore          # Git ignore file
+└── README.md           # This file
+Results
+After training, the script will:
 
-python src/train.py \
-    --ticker MSFT \
-    --episodes 1000 \
-    --trading_days 126 \
-    --learning_rate 0.0001 \
-    --gamma 0.99 \
-    --epsilon_start 1.0 \
-    --epsilon_end 0.01 \
-    --architecture 256 256 \
-    --batch_size 4096 \
-    --save_model
+Save the training history to results/results.csv
 
+Generate a performance plot at results/performance.png
 
-Command Line Arguments
-Argument	Default	Description
---ticker	AAPL	Stock ticker symbol
---trading_days	252	Number of days per episode
---episodes	500	Number of training episodes
---learning_rate	1e-4	Learning rate for optimizer
---gamma	0.99	Discount factor for future rewards
---epsilon_start	1.0	Initial exploration rate
---epsilon_end	0.01	Final exploration rate
---architecture	256 256	Hidden layer sizes
---batch_size	4096	Batch size for training
---save_model	False	Save trained model to disk
---output_dir	./results	Directory for saving results
+Display training progress in the console
 
+Example Output
+text
+Start training for 1000 episodes...
+  10|00:00:03|A:-39.5%(-39.5%)|M:  5.6%(  5.6%)|W:20.0%|ε: 0.960
+  20|00:01:27|A:-34.8%(-30.0%)|M: 23.7%( 41.8%)|W:15.0%|ε: 0.921
+  ...
+ 990|10:21:10|A: 62.4%( 35.9%)|M: 19.9%( -7.9%)|W:61.0%|ε: 0.000
+1000|10:28:18|A: 62.1%( 31.0%)|M: 17.6%(  3.5%)|W:60.0%|ε: 0.000
+Training complete. Results saved to results
+Performance Plot
+The generated performance.png shows:
 
-### Output Files
-After training, the following files are saved in ./results/:
+Left plot: Moving average of annual returns for agent and market
 
-results.csv: Episode-by-episode performance metrics
+Right plot: Rolling 50-episode average of agent outperformance
 
-{ticker}_performance.png: Learning curves (rolling returns and win rate)
+Code Quality
+This project follows best practices:
 
-{ticker}_distribution.png: Distribution of excess returns
+Type hints for all function arguments and return values
 
-model.h5: Trained model (if --save_model is used)
+Docstrings for all classes and methods
 
-Testing
-Run the test suite with pytest:
+Linting with flake8 in CI/CD pipeline
 
-# Install testing dependencies
-pip install pytest pytest-cov
+Reproducible results with fixed random seeds
 
-# Run all tests
-pytest tests/ -v
+CI/CD Pipeline
+GitHub Actions automatically runs on every push and pull request:
 
-# Run with coverage report
-pytest tests/ -v --cov=src --cov-report=term --cov-report=html
+Installs system dependencies (TA-Lib)
 
+Installs Python dependencies
 
-Test Structure
+Runs a quick training test (5 episodes, 20 trading days)
 
-tests/
-├── test_environment.py    # Tests for trading environment
-└── test_agent.py          # Tests for DDQN agent
+Runs flake8 linter to check code quality
